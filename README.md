@@ -1,47 +1,65 @@
 # jetson-agx-orin-builder
 
-A Docker-based build environment for generating reproducible Jetson Linux (L4T) flash images for the **Jetson AGX Orin 64GB**, without needing a native Ubuntu host.
+Um ambiente de build baseado em Docker para gerar imagens de flash reproduzíveis da Jetson Linux (L4T) para a **Jetson AGX Orin 64GB**, sem a necessidade de um host Ubuntu nativo.
 
-## How it works
+## Como funciona
 
-Image generation and flashing are split into two separate steps:
+A geração da imagem e o processo de gravação (*flash*) são divididos em duas etapas separadas:
+1. **Build** — executado dentro do Docker, sem necessidade de uma Jetson conectada. Gera um arquivo tarball da imagem de flash.
+2. **Flash** — executado com o Jetson conectado em modo de recuperação (*recovery mode*). Consome o tarball gerado na etapa 1.
 
-1. **Build** — runs inside Docker, no Jetson needed. Produces a flash image tarball.
-2. **Flash** — runs with the Jetson connected in recovery mode. Consumes the tarball from step 1.
+Isso permite gerar uma imagem validada uma única vez e gravá-la no dispositivo sempre que necessário.
 
-This means you can generate a known-good image once and flash it to the device at any time.
+## Requisitos
 
-## Requirements
+* Docker (com acesso de root)
+* Host Linux (necessário para o repasse de USB durante o flash)
+* Jetson AGX Orin 64GB DevKit
 
-- Docker
-- Linux host (for USB passthrough during flashing)
-- Jetson AGX Orin 64GB devkit
+## Estrutura do repositório
 
-## Repository structure
-
-```
+```text
 .
 ├── Dockerfile
 ├── README.md
-└── output/          # generated flash images land here (git-ignored)
+└── output/          # imagens de flash geradas são salvas aqui (ignorado pelo Git)
 ```
 
-## Usage
+## Uso
 
-### 1. Build the Docker image
+### 1. Configurar o suporte a binários aarch64 no host
+
+O processo de build faz `chroot` no rootfs do Jetson (que é aarch64) para instalar pacotes via `dpkg`. Como o host é x86_64, o kernel precisa saber como executar binários aarch64 — isso é feito via `binfmt_misc` com QEMU.
+
+Execute **uma vez** no host (precisa ser refeito após reinicialização):
 
 ```bash
-docker build -t jetson-agx-orin-builder .
+sudo apt install qemu-user-static
+sudo systemctl restart systemd-binfmt
 ```
 
-This downloads the L4T BSP and sample root filesystem from NVIDIA, applies the binaries, and bakes everything into the image. Takes a while on first run.
-
-### 2. Generate the flash image
-
-No Jetson required for this step.
+Ou, alternativamente, via Docker:
 
 ```bash
-docker run --rm \
+sudo docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+```
+
+> **Por que isso é necessário?** O script `apply_binaries.sh` da NVIDIA faz `chroot` no rootfs aarch64 e executa binários como `dpkg` para instalar pacotes. Sem o QEMU registrado como handler no kernel, o sistema não sabe como executar esses binários e retorna `Exec format error`.
+
+### 2. Construir a imagem Docker
+
+```bash
+sudo docker build -t jetson-agx-orin-builder .
+```
+
+Este comando baixa o BSP do L4T e o sistema de arquivos raiz (*sample root filesystem*) da NVIDIA, aplica os binários necessários e empacota tudo dentro da imagem Docker. A primeira execução pode demorar um pouco.
+
+### 3. Gerar a imagem de flash
+
+A Jetson não é necessária nesta etapa.
+
+```bash
+sudo docker run --rm \
   --privileged \
   -v $(pwd)/output:/workspace/output \
   jetson-agx-orin-builder \
@@ -51,29 +69,27 @@ docker run --rm \
     cp tools/kernel_flash/images/internal/*.tar.gz /workspace/output/"
 ```
 
-The flash image tarball is saved to `output/` on your host.
+O arquivo tarball da imagem de flash será salvo no diretório `output/` do host.
 
-### 3. Flash the Jetson
+### 4. Gravar (flashar) a Jetson
 
-Put the Jetson into recovery mode first:
+Primeiro, coloque a Jetson em modo de recuperação:
+1. Desligue o dispositivo.
+2. Pressione e mantenha pressionado o botão **Recovery**.
+3. Pressione e solte o botão **Power**.
+4. Aguarde 2 segundos e solte o botão **Recovery**.
+5. Conecte o cabo USB-C (a porta ao lado do conector de 40 pinos) ao host.
 
-1. Power off the device
-2. Hold the **Recovery** button
-3. Press and release **Power**
-4. Wait 2 seconds, release **Recovery**
-5. Connect USB-C (the port next to the 40-pin header) to your host
-
-Verify the device is visible:
+Verifique se o dispositivo está visível:
 
 ```bash
-lsusb | grep NVIDIA
-# should show: NVIDIA Corp. APX
+lsusb | grep NVIDIA # deve exibir: NVIDIA Corp. APX 
 ```
 
-Then flash:
+Em seguida, execute o flash:
 
 ```bash
-docker run --rm \
+sudo docker run --rm \
   --privileged \
   -v /dev/bus/usb:/dev/bus/usb \
   -v $(pwd)/output:/workspace/output \
@@ -83,26 +99,27 @@ docker run --rm \
     jetson-agx-orin-devkit internal"
 ```
 
-## Customizing the root filesystem
+## Personalizando o sistema de arquivos raiz (root filesystem)
 
-To pre-install packages or drop in config files before generating the image, add steps to the `Dockerfile` after `apply_binaries.sh`. The rootfs is at `Linux_for_Tegra/rootfs/` inside the container.
+Para pré-instalar pacotes ou adicionar arquivos de configuração antes de gerar a imagem, inclua etapas adicionais no `Dockerfile` após a execução de `apply_binaries.sh`. O rootfs está localizado em `Linux_for_Tegra/rootfs/` dentro do contêiner.
 
-Example — pre-install a package into the rootfs:
+Exemplo — pré-instalar um pacote no rootfs:
 
 ```dockerfile
 RUN cd Linux_for_Tegra && \
-    chroot rootfs apt-get install -y <your-package>
+    chroot rootfs apt-get install -y <seu-pacote>
 ```
 
-## L4T version
+## Versão do L4T
 
-This builder uses **L4T r36.4.4** (JetPack 6.1), based on Ubuntu 22.04.
+Este builder utiliza o **L4T r36.4.4** (JetPack 6.1), baseado no Ubuntu 22.04.
+Para atualizar a versão, substitua as URLs de download do BSP e do rootfs no `Dockerfile` e atualize a tag de versão correspondente.
 
-To upgrade, replace the BSP and rootfs download URLs in the `Dockerfile` and update the version tag.
+## Observações
 
-## Notes
+* `--privileged` é necessário para acesso aos dispositivos `loop` durante a geração da imagem.
+* O diretório `output/` é montado via *bind mount* para que a imagem permaneça disponível após o encerramento do contêiner.
+* O processo de flash requer um host Linux; o dispositivo USB precisa ser repassado corretamente ao contêiner.
+* Se o flash falhar no meio do processo, coloque a Jetson novamente em modo de recuperação e tente outra vez.
+* O registro do `binfmt_misc` não persiste após reinicialização do host — execute o passo 1 novamente se necessário.
 
-- `--privileged` is required for `loop` device access during image generation
-- The `output/` directory is bind-mounted so the image persists after the container exits
-- Flashing requires the host to be Linux; the USB device must pass through cleanly
-- If flashing fails mid-way, put the Jetson back into recovery mode and retry
