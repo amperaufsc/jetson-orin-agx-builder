@@ -1,12 +1,12 @@
-# jetson-agx-orin-builder
+# jetson-orin-agx-builder
 
-Um ambiente de build baseado em Docker para gerar imagens de flash reproduzíveis da Jetson Linux (L4T) para a **Jetson AGX Orin 64GB**, sem a necessidade de um host Ubuntu nativo.
+Um ambiente de build baseado em Docker para gerar imagens de flash reproduzíveis da Jetson Linux (L4T) para a **Jetson Orin AGX 64GB**, sem a necessidade de um host Ubuntu nativo.
 
 ## Como funciona
 
 A geração da imagem e o processo de gravação (*flash*) são divididos em duas etapas separadas:
 1. **Build** — executado dentro do Docker, sem necessidade de uma Jetson conectada. Gera um arquivo tarball da imagem de flash.
-2. **Flash** — executado com o Jetson conectado em modo de recuperação (*recovery mode*). Consome o tarball gerado na etapa 1.
+2. **Flash** — executado com a Jetson conectada em modo de recuperação (*recovery mode*). Consome o tarball gerado na etapa 1.
 
 Isso permite gerar uma imagem validada uma única vez e gravá-la no dispositivo sempre que necessário.
 
@@ -14,7 +14,7 @@ Isso permite gerar uma imagem validada uma única vez e gravá-la no dispositivo
 
 * Docker (com acesso de root)
 * Host Linux (necessário para o repasse de USB durante o flash)
-* Jetson AGX Orin 64GB DevKit
+* Jetson Orin AGX 64GB DevKit
 
 ## Estrutura do repositório
 
@@ -29,7 +29,7 @@ Isso permite gerar uma imagem validada uma única vez e gravá-la no dispositivo
 
 ### 1. Configurar o suporte a binários aarch64 no host
 
-O processo de build faz `chroot` no rootfs do Jetson (que é aarch64) para instalar pacotes via `dpkg`. Como o host é x86_64, o kernel precisa saber como executar binários aarch64 — isso é feito via `binfmt_misc` com QEMU.
+O processo de build faz `chroot` no rootfs da Jetson (que é aarch64) para instalar pacotes via `dpkg`. Como o host é x86_64, o kernel precisa saber como executar binários aarch64 — isso é feito via `binfmt_misc` com QEMU.
 
 Execute **uma vez** no host (precisa ser refeito após reinicialização):
 
