@@ -31,12 +31,12 @@ The flashing process reboots the Jetson multiple times via the connected USB. Be
 To prevent that, we can set an [`udev`](https://wiki.archlinux.org/title/Udev) rule to automatically disable the autosuspend feature for the USB port being used everytime the Jetson is connected to that port in recovery mode.
 
 ```bash
-sudo tee /etc/udev/rules.d/99-nvidia-jetson.rules << 'EOF'
+$ sudo tee /etc/udev/rules.d/99-nvidia-jetson.rules << 'EOF'
 SUBSYSTEM=="usb", ATTR{idVendor}=="0955", ATTR{idProduct}=="7023", ATTR{power/autosuspend}="-1", ATTR{power/control}="on"
 EOF
 
-sudo udevadm control --reload-rules
-sudo udevadm trigger
+$ sudo udevadm control --reload-rules
+$ sudo udevadm trigger
 ```
 
 Now, we need to put the Jetson in recovery mode.
@@ -59,7 +59,7 @@ Check if the device is visible:
 $ lsusb | grep NVIDIA  # must show: NVIDIA Corp. APX
 ```
 
-It is recommended you use an USB 3.0 (or faster) cable and port. On USB 3.0, the flashing process took me about 12 minutes.
+It is recommended you use an USB 3.0 (or faster) cable and port. Via USB 3.0, the flashing process took me about 12 minutes.
 
 ```bash
 $ dmesg | grep -i usb | tail -5 # must show: high-speed
@@ -84,7 +84,7 @@ Notice we bind mount our host's `/dev` and `/dev/bus/usb` directories onto the c
 After successfully flashing the Jetson and booting it for the first time, you can install all development and production dependencies running the `setup.sh` script. It is recommended you run this script as soon as you log in for the first time after a flash.
 
 ```bash
-$ ./setup.sh
+$ sudo ./setup.sh
 ```
 
 ## Upgrading
